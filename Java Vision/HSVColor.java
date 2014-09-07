@@ -1,5 +1,3 @@
-package JavaVision;
-
 import java.awt.*;
 
 public class HSVColor {

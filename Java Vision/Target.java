@@ -1,5 +1,3 @@
-package JavaVision;
-
 public class Target {
 	final static int TAPE_WIDTH_LIMIT = 50;
 	final static int VERTICAL_SCORE_LIMIT = 50;

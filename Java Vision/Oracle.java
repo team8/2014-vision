@@ -1,5 +1,3 @@
-package JavaVision;
-
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
@@ -22,8 +20,14 @@ public class Oracle {
 		this.image = image;
 	}
 
-	int ratioToScore(double ratio) {
-		return (int) Math.round(Math.max(0, Math.min(100, (1 - Math.abs(1 - ratio)) * 100)));
+	/**
+	 * Takes a value between 0 and 2 and returns a score between 0 and 100 on how close to 1 the value is.
+	 *
+	 * @param value The value to score
+	 * @return A score between 0 and 100 of how close to 1 the value is
+	 */
+	int valueToScore(double value) {
+		return (int) Math.round(Math.max(0, Math.min(100, (1 - Math.abs(1 - value)) * 100)));
 	}
 
 	void mask() {
@@ -77,7 +81,7 @@ public class Oracle {
 	void splitAndWeed() {
 		long startTime = System.nanoTime();
 		for (Particle particle : particles) {
-			if (particle.getRectScore() >= RECTANGULARITY_LIMIT && particle.getAspectRatio() > ASPECT_RATIO_LIMIT && particle.getArea() > MINIMUM_AREA) {
+			if (particle.getRectScore() >= RECTANGULARITY_LIMIT && particle.getAspectRatioScore() > ASPECT_RATIO_LIMIT && particle.getArea() > MINIMUM_AREA) {
 				if (particle.isVertical) verticalTargets.add(particle);
 				else horizontalTargets.add(particle);
 			}
@@ -91,10 +95,10 @@ public class Oracle {
 			target.verticalParticle = verticalTargets.get(0);
 			for (Particle verticalParticle : verticalTargets) {
 				for (Particle horizontalParticle : horizontalTargets) {
-					int leftScore = ratioToScore(1.2 * (verticalParticle.x - (horizontalParticle.x + horizontalParticle.width / 2)) / horizontalParticle.width);
-					int rightScore = ratioToScore(1.2 * ((horizontalParticle.x + horizontalParticle.width / 2) - verticalParticle.x - verticalParticle.width) / horizontalParticle.width);
-					int tapeWidthScore = ratioToScore(verticalParticle.width / horizontalParticle.height);
-					int verticalScore = ratioToScore(1 - (verticalParticle.y - (horizontalParticle.y + horizontalParticle.height / 2)) / (4 * horizontalParticle.height));
+					int leftScore = valueToScore(1.2 * (verticalParticle.x - (horizontalParticle.x + horizontalParticle.width / 2)) / horizontalParticle.width);
+					int rightScore = valueToScore(1.2 * ((horizontalParticle.x + horizontalParticle.width / 2) - verticalParticle.x - verticalParticle.width) / horizontalParticle.width);
+					int tapeWidthScore = valueToScore(verticalParticle.width / horizontalParticle.height);
+					int verticalScore = valueToScore(1 - (verticalParticle.y - (horizontalParticle.y + horizontalParticle.height / 2)) / (4 * horizontalParticle.height));
 
 					int total = leftScore > rightScore ? leftScore : rightScore;
 					total += tapeWidthScore + verticalScore;

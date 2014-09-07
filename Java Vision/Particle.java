@@ -1,5 +1,3 @@
-package JavaVision;
-
 import java.awt.*;
 import java.util.ArrayList;
 
@@ -61,7 +59,7 @@ public class Particle {
 	 * 
 	 * @return the measure of how close this particle's aspect ratio is to the real one (between 0 and 100)
 	 */
-	int getAspectRatio() {
+	int getAspectRatioScore() {
 		int perimeter = 2 * width + 2 * height;
 		int area = points.size();
 		double equivWidth, equivHeight;
