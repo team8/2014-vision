@@ -24,6 +24,10 @@ class Target(){
     bool hot = false;
   
   public:
-  
+    
+    //Default constructor
+    Target();
+    
+    //Checks if this target is hot
     void checkIfHot();
 }
