@@ -3,6 +3,10 @@
 
 #include "WPILib.h"
 
+/*
+ * A class representing a particle viewed by the visison system
+ */
+
 class Particle {
 private:
   
