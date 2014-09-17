@@ -31,3 +31,5 @@ class Target(){
     //Checks if this target is hot
     void checkIfHot();
 }
+
+#endif
