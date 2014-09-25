@@ -1,7 +1,8 @@
-Vision Code in Java
+Aerial Assist Vision Program
 ======
 
-This is for Aerial Assist.
-Mostly written by Tyler.
+A vision program used to detect goals in aerial assist.
+
+Java version runs on images, being ported to c++ to run on the robot.
 
 Is related to the offloading to Arduino/Pi.
