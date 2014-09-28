@@ -3,11 +3,11 @@
 #include "Vision/BinaryImage.h"
 #include "Math.h"
 
-#define PI = 3.14159265
+#define PI 3.14159265
 
 #define MAX_PARTICLES 10
 
-#define HALF_CAMERA_ANGLE 56 // Axis M1013 is about 67 degrees, but this might be correct
+#define HALF_CAMERA_ANGLE 67 // Axis M1013 is about 67 degrees, but this might be correct
 #define ERROR_MARGIN 3
 #define RECTANGULARITY_LIMIT 40
 #define ASPECT_RATIO_LIMIT 55
@@ -43,6 +43,7 @@ public:
 		stick(1)
 	{
 		myRobot.SetExpiration(0.1);
+		myRobot.SetSafetyEnabled(false);
 	}
 
 	void Autonomous() {
@@ -51,13 +52,17 @@ public:
 		int verticalTargets[MAX_PARTICLES];
 		int horizontalTargets[MAX_PARTICLES];
 		int numVertTargets, numHorizTargets;
-		AxisCamera &camera = AxisCamera::GetInstance();
+//		AxisCamera &camera = AxisCamera::GetInstance();
 		ParticleFilterCriteria2 maskCriteria[] = {{IMAQ_MT_AREA, MINIMUM_AREA, 65535, false, false}};
 		
-		ColorImage *image = camera.GetImage();
-		Threshold maskThreshold(105, 137, 230, 255, 133, 183);
-		BinaryImage *mask = image->ThresholdHSV(maskThreshold);
-		BinaryImage *maskedImage = mask->ParticleFilter(maskCriteria, 1);
+		ColorImage *image;
+		image = new RGBImage("/27ft_test_image.jpg");
+//		image = camera.GetImage();
+		Threshold maskThreshold(150, 195, 0, 255, 40, 255);
+		BinaryImage *mask = image -> ThresholdHSV(maskThreshold);
+		mask -> Write("/mask.bmp");
+		BinaryImage *maskedImage = mask -> ParticleFilter(maskCriteria, 1);
+		maskedImage -> Write("/maskedImage.bmp");
 		
 		vector<ParticleAnalysisReport> *reports = maskedImage->GetOrderedParticleAnalysisReports();
 		numVertTargets = numHorizTargets = 0;
@@ -112,12 +117,23 @@ public:
 				target.hot = isHot(target);
 			}
 			
-			delete maskedImage;
-			delete mask;
-			delete image;
-			delete scores;
-			delete reports;
+			if (numVertTargets > 0) {
+				ParticleAnalysisReport *distanceReport = &(reports -> at(target.verticalIndex));
+				double distance = getDistance(maskedImage, distanceReport);
+				if(target.hot) {
+					printf("Hot target located \n");
+					printf("Distance: %f \n", distance);
+				} else {
+					printf("No hot target present \n");
+					printf("Distance: %f \n", distance);
+				}
+			}
 		}
+		delete maskedImage;
+		delete mask;
+		delete image;
+		delete scores;
+		delete reports;
 	}
 	
 	double getRectScore(ParticleAnalysisReport *report){
@@ -143,7 +159,7 @@ public:
 	}
 	
 	double valueToScore(double value) {
-		return round(max(0, min(100, (1 - fabs(1 - value)) * 100)));
+		return max(0, min(100, (1 - fabs(1 - value)) * 100));
 	}
 	
 	bool isHot(Target target) {
