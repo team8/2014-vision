@@ -7,9 +7,9 @@
 
 #define MAX_PARTICLES 10
 
-#define HALF_CAMERA_ANGLE 67 // Axis M1013 is about 67 degrees, but this might be correct
+#define HALF_CAMERA_ANGLE 46 // Axis M1013 is about 67 degrees, but this might be correct
 #define ERROR_MARGIN 3
-#define RECTANGULARITY_LIMIT 40
+#define RECTANGULARITY_LIMIT 30
 #define ASPECT_RATIO_LIMIT 55
 #define MINIMUM_AREA 150
 #define TAPE_WIDTH_LIMIT 50
@@ -58,9 +58,8 @@ public:
 		ColorImage *image;
 		image = new RGBImage("/27ft_test_image.jpg");
 //		image = camera.GetImage();
-		Threshold maskThreshold(150, 195, 0, 255, 40, 255);
+		Threshold maskThreshold(105, 137, 230, 255, 133, 183);
 		BinaryImage *mask = image -> ThresholdHSV(maskThreshold);
-		mask -> Write("/mask.bmp");
 		BinaryImage *maskedImage = mask -> ParticleFilter(maskCriteria, 1);
 		maskedImage -> Write("/maskedImage.bmp");
 		
@@ -71,13 +70,13 @@ public:
 		if (reports -> size() > 0) {
 			scores = new Scores[reports -> size()];
 			
-			for (int i = 0; i < MAX_PARTICLES && i < reports->size(); i++) {
+			for (int i = 0; i < MAX_PARTICLES && i < reports -> size(); i++) {
 				ParticleAnalysisReport *report = &(reports -> at(i));
 				
 				scores[i].rectangularity = getRectScore(report);
 				scores[i].aspectRatioVertical = getAspectRatioScore(maskedImage, report, true);
 				scores[i].aspectRatioHorizontal = getAspectRatioScore(maskedImage, report, false);
-				
+								
 				if (scores[i].rectangularity > RECTANGULARITY_LIMIT && scores[i].aspectRatioHorizontal > ASPECT_RATIO_LIMIT) {
 					horizontalTargets[numHorizTargets++] = i;
 				} else if (scores[i].rectangularity > RECTANGULARITY_LIMIT && scores[i].aspectRatioVertical > ASPECT_RATIO_LIMIT) {
@@ -116,7 +115,7 @@ public:
 				}
 				target.hot = isHot(target);
 			}
-			
+
 			if (numVertTargets > 0) {
 				ParticleAnalysisReport *distanceReport = &(reports -> at(target.verticalIndex));
 				double distance = getDistance(maskedImage, distanceReport);
@@ -137,10 +136,7 @@ public:
 	}
 	
 	double getRectScore(ParticleAnalysisReport *report){
-		if(report -> boundingRect.width * report -> boundingRect.height != 0){
-			return 100 * report -> particleArea / (report -> boundingRect.width * report -> boundingRect.height);
-		}
-		return 0;
+		return 100 * report -> particleArea / (report -> boundingRect.width * report -> boundingRect.height);
 	}
 	
 	double getAspectRatioScore(BinaryImage *image, ParticleAnalysisReport *report, bool vertical){
