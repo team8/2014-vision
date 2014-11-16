@@ -76,12 +76,19 @@ public:
 				scores[i].rectangularity = getRectScore(report);
 				scores[i].aspectRatioVertical = getAspectRatioScore(maskedImage, report, true);
 				scores[i].aspectRatioHorizontal = getAspectRatioScore(maskedImage, report, false);
-								
+				
 				if (scores[i].rectangularity > RECTANGULARITY_LIMIT && scores[i].aspectRatioHorizontal > ASPECT_RATIO_LIMIT) {
 					horizontalTargets[numHorizTargets++] = i;
+					printf("Horizontal ");
 				} else if (scores[i].rectangularity > RECTANGULARITY_LIMIT && scores[i].aspectRatioVertical > ASPECT_RATIO_LIMIT) {
 					verticalTargets[numVertTargets++] = i;
+					printf("Vertical");
 				}
+				
+				double x, y;
+				imaqMeasureParticle(image -> GetImaqImage(), report -> particleIndex, 0, IMAQ_MT_EQUIVALENT_RECT_LONG_SIDE, &x);
+				imaqMeasureParticle(image -> GetImaqImage(), report -> particleIndex, 0, IMAQ_MT_EQUIVALENT_RECT_SHORT_SIDE, &y);
+				cout << x << " " << y << endl;
 			}
 			
 			target.totalScore = target.leftScore = target.rightScore = target.tapeWidthScore = target.verticalScore = 0;
