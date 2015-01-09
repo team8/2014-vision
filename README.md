@@ -1,8 +1,6 @@
-Aerial Assist Vision Program
+Team 8's Vision Programs
 ======
 
-A vision program used to detect goals in aerial assist.
+The Java program is a prototype for detecting the hot goal in 2014's game, Aerial Assist. It is not ever going to be used.
 
-Java version runs on images, being ported to c++ to run on the robot.
-
-Is related to the offloading to Arduino/Pi.
+The C++ program using OpenCV is a work in progress for detecting yellow totes in 2015's game, Recycle Rush. It is meant to be offloaded to the Raspberry Pi whenever that gets finished.
