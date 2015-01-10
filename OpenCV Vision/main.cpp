@@ -48,8 +48,7 @@ vector<Contour> genApproxPolys(vector<Contour> contours) {
     return approxPolys;
 }
 
-// Finds the distance to the totes
-double getDist(Mat image, vector<Contour> approxPolys) {
+double stripHeight(vector<Contour> approxPolys) {
     // Find the average height of the two L strips
     int totalHeight = 0;
     for (Contour poly : approxPolys) {
@@ -67,12 +66,40 @@ double getDist(Mat image, vector<Contour> approxPolys) {
 
         totalHeight += maxVertDiff;
     }
-    double avgHeight = totalHeight / approxPolys.size();
+    return totalHeight / approxPolys.size();
+}
 
+// Finds the distance to the totes
+double getDist(Mat image, vector<Contour> approxPolys) {
     // Complex math
-    double dist = TARGET_REAL_HEIGHT * image.cols / (2 * avgHeight * tan(CAMERA_ANGLE));
-
+    double dist = TARGET_REAL_HEIGHT * image.cols / (2 * stripHeight(approxPolys) * tan(CAMERA_ANGLE));
     return dist;
+}
+
+// Should find the angle the robot is to the tote
+double angleToTote(vector<Contour> approxPolys) {
+    // The width of the vertical bar if it is being viewed head on
+    double idealWidth = (2.0 * stripHeight(approxPolys)) / 7.0;
+
+    // Finds the actual width of the vertical bar
+    int totalWidth = 0;
+    for (Contour contour : approxPolys) {
+        Point topPoints[] = {contour[0], contour[1]};
+        for (int i = 2; i < contour.size(); i++) {
+            if (contour[i].y < topPoints[0].y) {
+                topPoints[1] = topPoints[0];
+                topPoints[0] = contour[i];
+            } else if (contour[i].y < topPoints[1].y) {
+                topPoints[1] = contour[i];
+            }
+        }
+        totalWidth += abs(topPoints[0].x - topPoints[1].x);
+    }
+
+    double avgWidth = totalWidth / approxPolys.size();
+
+    // The angle the robot is to the tote
+    return acos(avgWidth / idealWidth);
 }
 
 int main() {
@@ -87,7 +114,9 @@ int main() {
     // Find the distance to the tote
     vector<Contour> approxPolys = genApproxPolys(contours);
     double dist = getDist(image, approxPolys);
-    cout << dist << endl;
+    double angle = angleToTote(approxPolys);
+    cout << "Distance to tote: " << dist << endl;
+    cout << "Angle to tote: " << angle << endl;
 
     // Draw the outlines of the L strips
     Mat particles = Mat::zeros(strips.size(), CV_8UC3);
