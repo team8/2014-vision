@@ -22,7 +22,7 @@ Mat loadImage(string filePath) {
 Mat mask(Mat image) {
     // Masks the image and stores it in strips
     Mat strips;
-    inRange(image, Scalar(60, 110, 0), Scalar(180, 255, 60), strips);
+    inRange(image, Scalar(0, 25, 0), Scalar(150, 185, 20), strips);
 
     // Removes small discrepancies
     erode(strips, strips, getStructuringElement(MORPH_RECT, Size(5, 5)));
@@ -41,7 +41,7 @@ vector<Contour> genApproxPolys(vector<Contour> contours) {
         // Approximates contours into  the fewest points possible while maintaining their shape
         approxPolyDP(Mat(contour), approx, arcLength(Mat(contour), true) * 0.02, true);
 
-        if (approx.size() == 6) { // Filter out non-hexagons
+        if (approx.size() == 6) { // Filter out non-hexagons because an L is a hexagon.
             approxPolys.push_back(approx);
         }
     }
@@ -66,12 +66,18 @@ double stripHeight(vector<Contour> approxPolys) {
 
         totalHeight += maxVertDiff;
     }
+
     return totalHeight / approxPolys.size();
 }
 
 // Finds the distance to the totes
 double getDist(Mat image, vector<Contour> approxPolys) {
-    // Complex math
+    /* Complex math using the equation from
+     * https://wpilib.screenstepslive.com/s/3120/m/8731/l/90361-identifying-and-processing-the-targets#DistanceContinued
+     *
+     * It uses the number of columns in the image to get the image's width. The image width is being used because we know
+     * the camera's horizontal FOV angle, but not the vertical one.
+     */
     double dist = TARGET_REAL_HEIGHT * image.cols / (2 * stripHeight(approxPolys) * tan(CAMERA_ANGLE));
     return dist;
 }
@@ -102,8 +108,7 @@ double angleToTote(vector<Contour> approxPolys) {
     return acos(avgWidth / idealWidth);
 }
 
-int main() {
-    Mat image = loadImage("Test.jpg");
+void processImage(Mat image, double &dist, double &angle, bool showImg = false, string windowName = "Vision") {
     Mat strips = mask(image);
 
     // Find and store the L strips in contours
@@ -113,22 +118,43 @@ int main() {
 
     // Find the distance to the tote
     vector<Contour> approxPolys = genApproxPolys(contours);
-    double dist = getDist(image, approxPolys);
-    double angle = angleToTote(approxPolys);
-    cout << "Distance to tote: " << dist << endl;
-    cout << "Angle to tote: " << angle << endl;
+    dist = getDist(image, approxPolys);
+    angle = angleToTote(approxPolys);
 
-    // Draw the outlines of the L strips
-    Mat particles = Mat::zeros(strips.size(), CV_8UC3);
-    for (int i = 0; i < approxPolys.size(); i++) {
-        drawContours(particles, approxPolys, i, Scalar(100, 255, 0), 1, 8, hierarchy, 0, Point());
+    if (showImg) {
+        // Draw the outlines of the L strips
+        Mat particles = Mat::zeros(strips.size(), CV_8UC3);
+        for (int i = 0; i < approxPolys.size(); i++) {
+            drawContours(particles, approxPolys, i, Scalar(100, 255, 0), 1, 8, hierarchy, 0, Point());
+        }
+
+        // Display the L strip outlines
+        imshow(windowName, particles);
     }
+}
 
-    // Display the L strip outlines
+int main() {
     namedWindow("Vision", CV_WINDOW_AUTOSIZE);
-    imshow("Vision", particles);
+    VideoCapture vCap;
+//    Mat image = loadImage("Test_Images/10ft_30deg.jpg");
 
-    waitKey(0); // Quit the program on a keypress
+    vCap.open("http://root:camera@10.0.8.4/axis-cgi/jpg/image.cgi");
+
+    while(true) {
+        double dist;
+        double angle;
+
+        Mat image;
+        vCap.read(image);
+
+        processImage(image, dist, angle, true);
+        cout << "Distance to tote: " << dist << endl;
+        cout << "Angle to tote: " << angle / M_PI * 180 << endl;
+
+        if (waitKey(30) == 27) { // Quit the program on a keypress
+            break;
+        }
+    }
 
     return 0;
 }
