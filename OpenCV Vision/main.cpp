@@ -1,12 +1,17 @@
 #include <iostream>
+#include <queue>
 #include <opencv2/opencv.hpp>
 
-#define CAMERA_ANGLE 67 / 360.0 * M_PI
-#define TARGET_REAL_HEIGHT 7.0 / 10.0 * 12.0
+#define CAMERA_ANGLE 70 / 360.0 * M_PI // The angle of the camera's FOV in radians
+#define TARGET_REAL_HEIGHT 7.0 / 10.0 * 12.0 // The actual height of the target in feet
 
 using namespace cv;
 using namespace std;
 using Contour = vector<Point>;
+
+// Global variables
+queue<double> angles;
+double totalAng = 0;
 
 Mat loadImage(string filePath) {
     Mat image;
@@ -22,13 +27,14 @@ Mat loadImage(string filePath) {
 Mat mask(Mat image) {
     // Masks the image and stores it in strips
     Mat strips;
-    inRange(image, Scalar(0, 25, 0), Scalar(150, 185, 20), strips);
+    inRange(image, Scalar(65, 90, 0), Scalar(145, 255, 50), strips);
 
     // Removes small discrepancies
-    erode(strips, strips, getStructuringElement(MORPH_RECT, Size(5, 5)));
-    dilate(strips, strips, getStructuringElement(MORPH_RECT, Size(5, 5)));
-    dilate(strips, strips, getStructuringElement(MORPH_RECT, Size(5, 5)));
-    erode(strips, strips, getStructuringElement(MORPH_RECT, Size(5, 5)));
+    int strength = 2;
+    erode(strips, strips, getStructuringElement(MORPH_RECT, Size(strength, strength)));
+    dilate(strips, strips, getStructuringElement(MORPH_RECT, Size(strength, strength)));
+    dilate(strips, strips, getStructuringElement(MORPH_RECT, Size(strength, strength)));
+    erode(strips, strips, getStructuringElement(MORPH_RECT, Size(strength, strength)));
 
     return strips;
 }
@@ -41,14 +47,20 @@ vector<Contour> genApproxPolys(vector<Contour> contours) {
         // Approximates contours into  the fewest points possible while maintaining their shape
         approxPolyDP(Mat(contour), approx, arcLength(Mat(contour), true) * 0.02, true);
 
-        if (approx.size() == 6) { // Filter out non-hexagons because an L is a hexagon.
+//        if (approx.size() == 6) { // Filter out non-hexagons because an L is a hexagon.
             approxPolys.push_back(approx);
-        }
+//        }
     }
     return approxPolys;
 }
 
+// Finds the average height of the two L strips in pixels
 double stripHeight(vector<Contour> approxPolys) {
+    // The height of nothing is 0
+    if (approxPolys.size() == 0) {
+        return 0;
+    }
+
     // Find the average height of the two L strips
     int totalHeight = 0;
     for (Contour poly : approxPolys) {
@@ -72,6 +84,11 @@ double stripHeight(vector<Contour> approxPolys) {
 
 // Finds the distance to the totes
 double getDist(Mat image, vector<Contour> approxPolys) {
+    // If no L strips were found, don't try to find the distance.
+    if (approxPolys.size() == 0) {
+        return -1;
+    }
+
     /* Complex math using the equation from
      * https://wpilib.screenstepslive.com/s/3120/m/8731/l/90361-identifying-and-processing-the-targets#DistanceContinued
      *
@@ -82,33 +99,50 @@ double getDist(Mat image, vector<Contour> approxPolys) {
     return dist;
 }
 
-// Should find the angle the robot is to the tote
-double angleToTote(vector<Contour> approxPolys) {
-    // The width of the vertical bar if it is being viewed head on
-    double idealWidth = (2.0 * stripHeight(approxPolys)) / 7.0;
-
-    // Finds the actual width of the vertical bar
-    int totalWidth = 0;
-    for (Contour contour : approxPolys) {
-        Point topPoints[] = {contour[0], contour[1]};
-        for (int i = 2; i < contour.size(); i++) {
-            if (contour[i].y < topPoints[0].y) {
-                topPoints[1] = topPoints[0];
-                topPoints[0] = contour[i];
-            } else if (contour[i].y < topPoints[1].y) {
-                topPoints[1] = contour[i];
-            }
-        }
-        totalWidth += abs(topPoints[0].x - topPoints[1].x);
-    }
-
-    double avgWidth = totalWidth / approxPolys.size();
-
-    // The angle the robot is to the tote
-    return acos(avgWidth / idealWidth);
+// Find the distance between two points
+double dist(Point a, Point b) {
+    return sqrt((a.x - b.x)*(a.x - b.x) + (a.y - b.y)*(a.y - b.y));
 }
 
-void processImage(Mat image, double &dist, double &angle, bool showImg = false, string windowName = "Vision") {
+// Should find the angle the robot is to the tote
+double angleToTote(vector<Contour> approxPolys) {
+    // If no L strips were found, don't try to find the angle.
+    if (approxPolys.size() == 0) {
+        return -1;
+    }
+
+    double angleTotal = 0;
+    for (Contour poly : approxPolys) {
+        // Calculate the height of the L strip, which is the same as the ideal width
+        double idealWidth = 0;
+        for (int i = 0; i < poly.size() - 1; i++) {
+            double vertDiff = dist(poly[i], poly[i+1]);
+            if (vertDiff > idealWidth)
+                idealWidth = vertDiff;
+        }
+        double vertDiff = dist(poly[0], poly[poly.size()-1]); // Repeat for the first and last points
+        if (vertDiff > idealWidth)
+            idealWidth = vertDiff;
+
+        // Calculate the width of the L strip
+        Point bottomPoints[] = {Point(-1, -1), Point(-1, -1)};
+        for (int i = 0; i < poly.size(); i++) {
+            if (poly[i].y > bottomPoints[0].y) {
+                bottomPoints[1] = bottomPoints[0];
+                bottomPoints[0] = poly[i];
+            } else if (poly[i].y > bottomPoints[1].y) {
+                bottomPoints[1] = poly[i];
+            }
+        }
+        double width = dist(bottomPoints[0], bottomPoints[1]);
+
+        angleTotal += acos(width / idealWidth);
+    }
+
+    return angleTotal / approxPolys.size();
+}
+
+Mat processImage(Mat image, double &dist, double &angle) {
     Mat strips = mask(image);
 
     // Find and store the L strips in contours
@@ -119,39 +153,55 @@ void processImage(Mat image, double &dist, double &angle, bool showImg = false, 
     // Find the distance to the tote
     vector<Contour> approxPolys = genApproxPolys(contours);
     dist = getDist(image, approxPolys);
-    angle = angleToTote(approxPolys);
 
-    if (showImg) {
-        // Draw the outlines of the L strips
-        Mat particles = Mat::zeros(strips.size(), CV_8UC3);
-        for (int i = 0; i < approxPolys.size(); i++) {
-            drawContours(particles, approxPolys, i, Scalar(100, 255, 0), 1, 8, hierarchy, 0, Point());
+    // Keeps a running average of the last 10 angle measurements
+    double newAngle = angleToTote(approxPolys);
+    if (newAngle != -1 && newAngle == newAngle) { // Makes sure newAngle isn't NaN
+        if (totalAng != totalAng) { // If the totalAngle is NaN
+            cout << "SADAS" << endl;
+            totalAng = 0;
+            while (!angles.empty()) angles.pop();
         }
 
-        // Display the L strip outlines
-        imshow(windowName, particles);
+        angles.push(newAngle);
+        totalAng += angles.back();
+        while (angles.size() > 10) {
+            totalAng -= angles.front();
+            angles.pop();
+        }
+
+        angle = totalAng / angles.size();
     }
+
+    // Draw the outlines of the L strips
+    Mat particles = Mat::zeros(strips.size(), CV_8UC3);
+    for (int i = 0; i < approxPolys.size(); i++) {
+        drawContours(particles, approxPolys, i, Scalar(100, 255, 0), 1, 8, hierarchy, 0, Point());
+    }
+
+    return particles;
 }
 
 int main() {
     namedWindow("Vision", CV_WINDOW_AUTOSIZE);
-    VideoCapture vCap;
-//    Mat image = loadImage("Test_Images/10ft_30deg.jpg");
 
-    vCap.open("http://root:camera@10.0.8.4/axis-cgi/jpg/image.cgi");
+    VideoCapture vCap;
+    vCap.open("http://10.0.8.4/mjpg/video.mjpg");
 
     while(true) {
-        double dist;
-        double angle;
+        double dist = 0;
+        double angle = 0;
 
         Mat image;
         vCap.read(image);
 
-        processImage(image, dist, angle, true);
-        cout << "Distance to tote: " << dist << endl;
-        cout << "Angle to tote: " << angle / M_PI * 180 << endl;
+        Mat processed = processImage(image, dist, angle);
+        putText(processed, "Dist: " + to_string(dist), Point(12, 64), CV_FONT_NORMAL, 2, Scalar(255, 255, 255));
+        putText(processed, "Angle: " + to_string(angle / M_PI * 180), Point(12, 128), CV_FONT_NORMAL, 2, Scalar(255, 255, 255));
 
-        if (waitKey(30) == 27) { // Quit the program on a keypress
+        imshow("Vision", processed);
+
+        if (waitKey(1) == 27) { // Quit the program when the user presses escape
             break;
         }
     }
