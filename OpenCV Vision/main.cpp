@@ -2,12 +2,52 @@
 #include <queue>
 #include <opencv2/opencv.hpp>
 
+/*  _  __ __  _____ __ _____  __  __      ______ _____  __ ______
+ * | |/ // / / ___// // __  |/  |/ /     /___  // __  |/ //  ___/
+ * | | // /__\ \  / // /_/ // /|| /     /  ___// /_/ // //___  /
+ * |__//_//____/ /_/|_____//_/ |_/     /_____/|_____//_//_____/
+ *
+ * for Recycle Rush 2015
+ * Written by Tyler Packard with help from Ben Cohen-Wang
+ *
+ * OVERVIEW:
+ * This program identifies yellow totes during autonomous mode and calculates the distance and angle to the tote. It
+ * works by shining a bright green light at the retro-reflective tape on the yellow totes and capturing the reflected
+ * in a camera mounted on the robot. The camera takes low exposure video and darkens the images before sending them to
+ * this program. Once this program receives the images, it masks out the retro-reflective based on predetermined hue,
+ * saturation, and value (HSV) ranges. Then all of the masked blobs are converted to polygons and non-reflective strip
+ * shaped polygons are removed.
+ *
+ * CALCULATIONS:
+ * The distance to yellow totes is calculated based off of the ratio of the width of the reflective strips to the width
+ * of the camera's field of view. The angle to the tote is calculated by finding the arccosine of the actual width of
+ * the strips divided by the expected width of the strips if the angle was 0 degrees. For more in-depth explainations,
+ * see the comments above the actual methods.
+ *
+ * USAGE:
+ * The values found by this program will be went by the raspberry pi to the RoboRio. They will be used by the autonomous
+ * controller to direct the robot to the yellow totes. This allows us to create tote sets and stacked tote sets. Tote
+ * sets exist if all three yellow totes are in the auto zone, but are not stacked, and it awards the alliance 6 points.
+ * Stacked tote sets exist if all three yellow totes are in the auto zone and stacked in a legal formation, awarding the
+ * alliance 20 points.
+ *
+ * WARNINGS:
+ * The angle finding formula does not return accurate angles when the robot is close to the totes (roughly less than 7.5
+ * feet) and at a shallow angle to the tote (roughly less than 15 degrees). This happens because the the cosines of
+ * smaller angles are closer together than the cosines of larger angles. This means that the arccosine function requires
+ * increasingly accurate measurments the closer the angle is to 0 degrees, and our camera cannot provide such accurate
+ * measurements.
+ * Another problem with this code is that it becomes very difficult to detect the retro-reflective strips from over 15
+ * feet away. This happens because the resolution of our camera is too low, and the reflective strips are too small in
+ * the image to detect reliably.
+ */
+
 #define CAMERA_ANGLE 70 / 360.0 * M_PI // The angle of the camera's FOV in radians
-#define TARGET_REAL_HEIGHT 7.0 / 10.0 * 12.0 // The actual height of the target in feet
+#define TARGET_REAL_HEIGHT 7.0 * 1.2 // The actual height of the target in feet
 
 using namespace cv;
 using namespace std;
-using Contour = vector<Point>;
+using Contour = vector<Point>; // Contours are collections of points
 
 // Global variables
 queue<double> angles;
@@ -23,7 +63,7 @@ Mat loadImage(string filePath) {
     return image;
 }
 
-// Masks the image so that only the reflective strips are left
+// Masks the image so that only bright green pixels are left
 Mat mask(Mat image) {
     // Masks the image and stores it in strips
     Mat strips;
@@ -47,15 +87,28 @@ vector<Contour> genApproxPolys(vector<Contour> contours) {
         // Approximates contours into  the fewest points possible while maintaining their shape
         approxPolyDP(Mat(contour), approx, arcLength(Mat(contour), true) * 0.02, true);
 
-//        if (approx.size() == 6) { // Filter out non-hexagons because an L is a hexagon.
+        if (approx.size() == 6) { // Filter out non-hexagons because an L is a hexagon.
             approxPolys.push_back(approx);
-//        }
+        }
     }
     return approxPolys;
 }
 
-// Finds the average height of the two L strips in pixels
-double stripHeight(vector<Contour> approxPolys) {
+/**
+ * Finds the distance to the totes
+ *
+ * The distance to yellow totes is calculated based off of the ratio of the width of the reflective strips to the width
+ * of the camera's field of view. First, the width of the camera's FOV in feet is found since we know the width of the
+ * reflective strips in pixels and feet and we know the width of the FOV in pixels too. Then the distance is found using
+ * trig since we know the angle of the camera's field of view.
+ */
+double getDist(Mat image, vector<Contour> approxPolys) {
+    // If no L strips were found, don't try to find the distance.
+    if (approxPolys.size() == 0) {
+        return -1;
+    }
+
+    // Finds the average height of the L strips
     // The height of nothing is 0
     if (approxPolys.size() == 0) {
         return 0;
@@ -79,15 +132,7 @@ double stripHeight(vector<Contour> approxPolys) {
         totalHeight += maxVertDiff;
     }
 
-    return totalHeight / approxPolys.size();
-}
-
-// Finds the distance to the totes
-double getDist(Mat image, vector<Contour> approxPolys) {
-    // If no L strips were found, don't try to find the distance.
-    if (approxPolys.size() == 0) {
-        return -1;
-    }
+    double stripHeight = totalHeight / approxPolys.size();
 
     /* Complex math using the equation from
      * https://wpilib.screenstepslive.com/s/3120/m/8731/l/90361-identifying-and-processing-the-targets#DistanceContinued
@@ -95,7 +140,7 @@ double getDist(Mat image, vector<Contour> approxPolys) {
      * It uses the number of columns in the image to get the image's width. The image width is being used because we know
      * the camera's horizontal FOV angle, but not the vertical one.
      */
-    double dist = TARGET_REAL_HEIGHT * image.cols / (2 * stripHeight(approxPolys) * tan(CAMERA_ANGLE));
+    double dist = TARGET_REAL_HEIGHT * image.cols / (2 * stripHeight * tan(CAMERA_ANGLE));
     return dist;
 }
 
@@ -104,7 +149,15 @@ double dist(Point a, Point b) {
     return sqrt((a.x - b.x)*(a.x - b.x) + (a.y - b.y)*(a.y - b.y));
 }
 
-// Should find the angle the robot is to the tote
+/**
+ * Finds the angle of the robot to the tote.
+ *
+ * First, the expected width in pixels of the reflective strips at 0 degrees is found by calculating the height of the
+ * strips, since the height and width are the same in real life. Then, the actual width of the strips in pixels is
+ * found. The angle of the robot to the tote is then the arccosine of the actual width divided by the width at 0 degrees.
+ *
+ * This formula was derived by Ben Cohen-Wang.
+ */
 double angleToTote(vector<Contour> approxPolys) {
     // If no L strips were found, don't try to find the angle.
     if (approxPolys.size() == 0) {
@@ -142,6 +195,10 @@ double angleToTote(vector<Contour> approxPolys) {
     return angleTotal / approxPolys.size();
 }
 
+/**
+ * The method that calls all of the helper methods to calculate the distance and width to the tote.
+ * It also keeps a running average of the angle to the tote to increase accuracy.
+ */
 Mat processImage(Mat image, double &dist, double &angle) {
     Mat strips = mask(image);
 
@@ -158,7 +215,6 @@ Mat processImage(Mat image, double &dist, double &angle) {
     double newAngle = angleToTote(approxPolys);
     if (newAngle != -1 && newAngle == newAngle) { // Makes sure newAngle isn't NaN
         if (totalAng != totalAng) { // If the totalAngle is NaN
-            cout << "SADAS" << endl;
             totalAng = 0;
             while (!angles.empty()) angles.pop();
         }
@@ -182,6 +238,10 @@ Mat processImage(Mat image, double &dist, double &angle) {
     return particles;
 }
 
+/**
+ * Connects to the camera and runs the image processing method, displaying the masked image, distance, and angle to the
+ * tote on a window. It quits when you hold down the escape key.
+ */
 int main() {
     namedWindow("Vision", CV_WINDOW_AUTOSIZE);
 
