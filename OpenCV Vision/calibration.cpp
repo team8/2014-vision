@@ -41,12 +41,12 @@ int main() {
     namedWindow("Contours", CV_WINDOW_AUTOSIZE);
     namedWindow("Calibration", CV_WINDOW_FREERATIO);
 
-    int minH = 0, maxH = 180;
-    int minS = 0, maxS = 255;
-    int minV = 0, maxV = 255;
+    int minH = 123, maxH = 236;
+    int minS = 175, maxS = 255;
+    int minV = 0, maxV = 95;
 
-    createTrackbar("Min H", "Calibration", &minH, 180);
-    createTrackbar("Max H", "Calibration", &maxH, 180);
+    createTrackbar("Min H", "Calibration", &minH, 360);
+    createTrackbar("Max H", "Calibration", &maxH, 360);
     createTrackbar("Min S", "Calibration", &minS, 255);
     createTrackbar("Max S", "Calibration", &maxS, 255);
     createTrackbar("Min V", "Calibration", &minV, 255);

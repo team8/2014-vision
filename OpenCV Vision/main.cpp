@@ -38,7 +38,7 @@ Mat loadImage(string filePath) {
 Mat mask(Mat image) {
     // Masks the image and stores it in strips
     Mat strips;
-    inRange(image, Scalar(65, 90, 0), Scalar(145, 255, 50), strips);
+    inRange(image, Scalar(140, 195, 0), Scalar(265, 255, 50), strips);
 
     // Removes small discrepancies
     int strength = 2;

@@ -11,3 +11,6 @@ target_link_libraries(Vision ${OpenCV_LIBS})
 
 add_executable(Calibration calibration.cpp)
 target_link_libraries(Calibration ${OpenCV_LIBS})
+
+add_executable(TeleopGuide teleop_guide.cpp)
+target_link_libraries(TeleopGuide ${OpenCV_LIBS})
